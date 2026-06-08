@@ -28,9 +28,10 @@ class GameScreen(private val game: OrbitalGame, private val mode: GameMode) : Sc
     private val renderer = WorldRenderer()
     private val hud = Hud()
 
-    private val warpLevels = floatArrayOf(1f, 2f, 4f, 8f)
-    private var warpIndex = 0
-    private val timeWarp: Float get() = warpLevels[warpIndex]
+    // Time speed: 0x (paused), slow-mo, real-time, and fast-forward steps.
+    private val speeds = floatArrayOf(0f, 0.5f, 1f, 2f, 4f, 8f)
+    private var warpIndex = DEFAULT_SPEED_INDEX
+    private val timeWarp: Float get() = speeds[warpIndex]
 
     private var physicsAccumulator = 0f
     private var predictionTimer = 0f
@@ -106,7 +107,12 @@ class GameScreen(private val game: OrbitalGame, private val mode: GameMode) : Sc
             HudAction.CUT -> ship.activeDir = ThrustDirection.NONE
             HudAction.THROTTLE_UP -> ship.throttle = (ship.throttle + 0.1f).coerceAtMost(1f)
             HudAction.THROTTLE_DOWN -> ship.throttle = (ship.throttle - 0.1f).coerceAtLeast(0f)
-            HudAction.WARP -> warpIndex = (warpIndex + 1) % warpLevels.size
+            HudAction.SPEED_UP -> warpIndex = (warpIndex + 1).coerceAtMost(speeds.size - 1)
+            HudAction.SPEED_DOWN -> warpIndex = (warpIndex - 1).coerceAtLeast(0)
+            HudAction.RECENTER -> {
+                camera.followShip = true
+                camera.centerOn(world.ship.position)
+            }
             HudAction.SCAN -> if (mode == GameMode.SURVIVAL) world.performScan()
             HudAction.SHOP -> if (mode == GameMode.SURVIVAL && world.isNearDock()) {
                 game.setScreen(ShopScreen(game, this, world))
@@ -130,7 +136,7 @@ class GameScreen(private val game: OrbitalGame, private val mode: GameMode) : Sc
         world = SystemFactory.build(mode)
         camera.centerOn(world.ship.position)
         camera.followShip = true
-        warpIndex = 0
+        warpIndex = DEFAULT_SPEED_INDEX
         world.updatePrediction()
     }
 
@@ -162,7 +168,7 @@ class GameScreen(private val game: OrbitalGame, private val mode: GameMode) : Sc
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT)
 
         renderer.render(world, camera)
-        hud.render(world, timeWarp)
+        hud.render(world, timeWarp, camera.followShip)
     }
 
     override fun dispose() {
@@ -176,5 +182,6 @@ class GameScreen(private val game: OrbitalGame, private val mode: GameMode) : Sc
         const val PREDICT_REFRESH = 0.08f
         const val DV_STEP = 5f
         const val MAX_NODE_LEAD = 18f
+        const val DEFAULT_SPEED_INDEX = 2 // 1x in `speeds`
     }
 }

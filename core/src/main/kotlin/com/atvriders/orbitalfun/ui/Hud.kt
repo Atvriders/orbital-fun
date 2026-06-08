@@ -15,7 +15,7 @@ import com.atvriders.orbitalfun.game.World
 enum class HudAction {
     PROGRADE, RETROGRADE, RADIAL_IN, RADIAL_OUT, CUT,
     THROTTLE_UP, THROTTLE_DOWN,
-    WARP,
+    SPEED_DOWN, SPEED_UP, RECENTER,
     SCAN, SHOP,
     MANEUVER_TOGGLE, PRO_UP, PRO_DOWN, RAD_UP, RAD_DOWN,
     NODE_EARLIER, NODE_LATER, EXEC, CLEAR_NODE,
@@ -48,6 +48,15 @@ class Hud {
     private val bw = 92f   // button width
     private val bh = 60f   // button height
     private val pad = 10f
+    private val sideMargin = 36f
+    private val topMargin = 28f
+
+    // Where to draw the current-speed label (between the << / >> buttons).
+    private var speedLabelX = 0f
+    private var speedLabelY = 0f
+
+    // Camera follow state, passed in each frame for the CENTER button highlight.
+    private var following = true
 
     fun resize(width: Int, height: Int) {
         this.width = width.toFloat()
@@ -60,40 +69,61 @@ class Hud {
     private fun layoutButtons() {
         buttons.clear()
 
-        // Bottom-left thrust D-pad: PRO (up), RETRO (down), RAD-IN (left), RAD-OUT (right), CUT (center).
-        val cx = pad + bw + pad
-        val cy = pad + bh + pad
-        add(HudAction.PROGRADE, "PRO+", cx, cy + bh + pad)
-        add(HudAction.RETROGRADE, "RETRO", cx, cy - bh - pad)
-        add(HudAction.RADIAL_IN, "RAD IN", cx - bw - pad, cy)
-        add(HudAction.RADIAL_OUT, "RAD OUT", cx + bw + pad, cy)
-        add(HudAction.CUT, "CUT", cx, cy)
+        val col = bw + pad
+        val row = bh + pad
+        // Raise both thumb pads off the bottom edge so they sit under the thumbs,
+        // not jammed into the corners.
+        val baseY = height * 0.12f
 
-        // Throttle controls, bottom-center.
-        val tx = width * 0.5f - bw - pad
-        add(HudAction.THROTTLE_DOWN, "THR -", tx, pad)
-        add(HudAction.THROTTLE_UP, "THR +", tx + 2f * (bw + pad), pad)
+        // --- Left thumb pad: thrust D-pad + throttle, lower-left, raised/inset. ---
+        val lLeft = sideMargin
+        val lMid = sideMargin + col
+        val lRight = sideMargin + 2f * col
+        // Bottom row: THR-  RETRO  THR+
+        add(HudAction.THROTTLE_DOWN, "THR -", lLeft, baseY)
+        add(HudAction.RETROGRADE, "RETRO", lMid, baseY)
+        add(HudAction.THROTTLE_UP, "THR +", lRight, baseY)
+        // Middle row: RAD IN  CUT  RAD OUT
+        add(HudAction.RADIAL_IN, "RAD IN", lLeft, baseY + row)
+        add(HudAction.CUT, "CUT", lMid, baseY + row)
+        add(HudAction.RADIAL_OUT, "RAD OUT", lRight, baseY + row)
+        // Top: PRO+ (above CUT)
+        add(HudAction.PROGRADE, "PRO+", lMid, baseY + 2f * row)
 
-        // Top-right utility row.
-        var rx = width - bw - pad
-        add(HudAction.MENU, "MENU", rx, height - bh - pad); rx -= bw + pad
-        add(HudAction.RESET, "RESET", rx, height - bh - pad); rx -= bw + pad
-        add(HudAction.WARP, "WARP", rx, height - bh - pad); rx -= bw + pad
-        add(HudAction.SCAN, "SCAN", rx, height - bh - pad); rx -= bw + pad
-        add(HudAction.SHOP, "SHOP", rx, height - bh - pad)
+        // --- Right thumb pad: maneuver-node planner, lower-right, raised/inset. ---
+        val rRight = width - sideMargin - bw
+        val rMid = rRight - col
+        val rLeft = rRight - 2f * col
+        add(HudAction.MANEUVER_TOGGLE, "NODE", rLeft, baseY + 2f * row)
+        add(HudAction.PRO_UP, "PG +", rMid, baseY + 2f * row)
+        add(HudAction.PRO_DOWN, "PG -", rRight, baseY + 2f * row)
+        add(HudAction.NODE_EARLIER, "T -", rLeft, baseY + row)
+        add(HudAction.RAD_UP, "RD +", rMid, baseY + row)
+        add(HudAction.RAD_DOWN, "RD -", rRight, baseY + row)
+        add(HudAction.NODE_LATER, "T +", rLeft, baseY)
+        add(HudAction.EXEC, "BURN", rMid, baseY)
+        add(HudAction.CLEAR_NODE, "CLR", rRight, baseY)
 
-        // Bottom-right maneuver-node cluster (KSP-style planner).
-        val mx = width - 3f * (bw + pad)
-        val my = pad
-        add(HudAction.MANEUVER_TOGGLE, "NODE", mx, my + 2f * (bh + pad))
-        add(HudAction.PRO_UP, "PG +", mx + bw + pad, my + 2f * (bh + pad))
-        add(HudAction.PRO_DOWN, "PG -", mx + 2f * (bw + pad), my + 2f * (bh + pad))
-        add(HudAction.RAD_UP, "RD +", mx + bw + pad, my + bh + pad)
-        add(HudAction.RAD_DOWN, "RD -", mx + 2f * (bw + pad), my + bh + pad)
-        add(HudAction.NODE_EARLIER, "T -", mx, my + bh + pad)
-        add(HudAction.NODE_LATER, "T +", mx, my)
-        add(HudAction.EXEC, "BURN", mx + bw + pad, my)
-        add(HudAction.CLEAR_NODE, "CLR", mx + 2f * (bw + pad), my)
+        // --- Top utility row, inset and right-aligned (clear of top-left readouts).
+        // Visual order L->R: CENTER  <<  [speed]  >>  SCAN  SHOP  RESET  MENU
+        val topY = height - topMargin - bh
+        val xMenu = width - sideMargin - bw
+        val xReset = xMenu - col
+        val xShop = xReset - col
+        val xScan = xShop - col
+        val xSpeedUp = xScan - col
+        val xSpeedLabel = xSpeedUp - col
+        val xSpeedDown = xSpeedLabel - col
+        val xCenter = xSpeedDown - col
+        add(HudAction.MENU, "MENU", xMenu, topY)
+        add(HudAction.RESET, "RESET", xReset, topY)
+        add(HudAction.SHOP, "SHOP", xShop, topY)
+        add(HudAction.SCAN, "SCAN", xScan, topY)
+        add(HudAction.SPEED_UP, ">>", xSpeedUp, topY)
+        add(HudAction.SPEED_DOWN, "<<", xSpeedDown, topY)
+        add(HudAction.RECENTER, "CENTER", xCenter, topY)
+        speedLabelX = xSpeedLabel + bw / 2f
+        speedLabelY = topY + bh / 2f
     }
 
     private fun add(action: HudAction, label: String, x: Float, y: Float) {
@@ -110,7 +140,8 @@ class Hud {
         return null
     }
 
-    fun render(world: World, timeWarp: Float) {
+    fun render(world: World, timeWarp: Float, following: Boolean) {
+        this.following = following
         // 1) Button backgrounds.
         shapes.projectionMatrix = camera.combined
         shapes.begin(ShapeRenderer.ShapeType.Filled)
@@ -144,9 +175,17 @@ class Hud {
                 b.rect.y + (b.rect.height + layout.height) / 2f,
             )
         }
+        // Current time-speed, centered between the << / >> buttons.
+        val speed = speedText(timeWarp)
+        layout.setText(font, speed)
+        font.color = if (timeWarp == 0f) Color.valueOf("ffd166") else Color.WHITE
+        font.draw(batch, speed, speedLabelX - layout.width / 2f, speedLabelY + layout.height / 2f)
         drawReadouts(world, timeWarp)
         batch.end()
     }
+
+    private fun speedText(timeWarp: Float): String =
+        if (timeWarp == 0f) "Paused" else "${fmt(timeWarp)}x"
 
     private fun drawReadouts(world: World, timeWarp: Float) {
         val ship = world.ship
@@ -165,7 +204,7 @@ class Hud {
             sb.append("Trajectory: ESCAPE (hyperbolic)\n")
         }
         sb.append("Throttle: ").append((ship.throttle * 100).toInt()).append("%  ")
-        sb.append("Warp: ").append(fmt(timeWarp)).append("x  ")
+        sb.append("Speed: ").append(speedText(timeWarp)).append("  ")
         sb.append("Fuel used: ").append(fmt(ship.fuelUsed)).append('\n')
 
         if (world.mode == GameMode.SURVIVAL) {
@@ -206,6 +245,7 @@ class Hud {
             HudAction.RADIAL_IN -> dir == ThrustDirection.RADIAL_IN
             HudAction.RADIAL_OUT -> dir == ThrustDirection.RADIAL_OUT
             HudAction.MANEUVER_TOGGLE -> world.maneuver.active
+            HudAction.RECENTER -> following
             HudAction.SHOP -> world.mode == GameMode.SURVIVAL && world.isNearDock()
             else -> false
         }
