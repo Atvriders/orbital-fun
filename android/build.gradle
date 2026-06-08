@@ -35,6 +35,8 @@ android {
     }
 }
 
+configurations { natives }
+
 dependencies {
     implementation project(':core')
     implementation "com.badlogicgames.gdx:gdx-backend-android:$gdxVersion"
@@ -43,8 +45,6 @@ dependencies {
     natives "com.badlogicgames.gdx:gdx-platform:$gdxVersion:natives-x86"
     natives "com.badlogicgames.gdx:gdx-platform:$gdxVersion:natives-x86_64"
 }
-
-configurations { natives }
 
 // Copy the libGDX native .so files into the right jniLibs folders before packaging.
 tasks.register('copyAndroidNatives') {
