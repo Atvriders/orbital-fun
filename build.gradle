@@ -1,0 +1,25 @@
+buildscript {
+    repositories {
+        mavenCentral()
+        google()
+        gradlePluginPortal()
+    }
+    dependencies {
+        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlinVersion"
+        // The Android Gradle Plugin is only needed (and only resolvable) when the
+        // android module is part of the build, i.e. when an SDK is available.
+        def hasAndroidSdk = System.getenv('ANDROID_HOME') != null ||
+                System.getenv('ANDROID_SDK_ROOT') != null ||
+                new File(rootDir, 'local.properties').exists()
+        if (hasAndroidSdk) {
+            classpath "com.android.tools.build:gradle:$agpVersion"
+        }
+    }
+}
+
+allprojects {
+    repositories {
+        mavenCentral()
+        google()
+    }
+}

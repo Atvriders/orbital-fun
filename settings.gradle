@@ -1,0 +1,13 @@
+rootProject.name = 'orbital-fun'
+
+include 'core'
+include 'lwjgl3'
+
+// The Android module is only included when an Android SDK is available, so that
+// the core + desktop builds work in environments without the SDK installed.
+def hasAndroidSdk = System.getenv('ANDROID_HOME') != null ||
+        System.getenv('ANDROID_SDK_ROOT') != null ||
+        new File(rootDir, 'local.properties').exists()
+if (hasAndroidSdk) {
+    include 'android'
+}
