@@ -29,6 +29,9 @@ class World(
 
     val origin: Vector2 = Vector2(star.position)
 
+    /** Active control scheme; set by the screen from persisted [Settings]. */
+    var controlScheme: ControlScheme = ControlScheme.BUTTONS
+
     var simTime: Float = 0f
         private set
 
@@ -59,7 +62,7 @@ class World(
         Integrator.step(ship.position, ship.velocity, ship.thrustAccel, gravityBodies, simTime, dt)
         simTime += dt
 
-        if (!ship.wantsThrust || ship.thrustAccel.isZero) {
+        if (ship.thrustAccel.isZero) {
             ship.heading = ship.velocity.angleRad()
         }
         if (mode == GameMode.SURVIVAL) {
@@ -68,11 +71,24 @@ class World(
     }
 
     private fun applyThrustAndFuel(dt: Float) {
-        if (!ship.wantsThrust) {
+        // Determine whether we're thrusting and the effective throttle (0..1),
+        // which differs by control scheme.
+        val thrusting: Boolean
+        val effectiveThrottle: Float
+        if (controlScheme == ControlScheme.JOYSTICK) {
+            val mag = ship.stick.len().coerceAtMost(1f)
+            thrusting = mag > STICK_DEADZONE
+            effectiveThrottle = mag
+        } else {
+            thrusting = ship.wantsThrust
+            effectiveThrottle = ship.throttle
+        }
+        if (!thrusting) {
             ship.thrustAccel.set(0f, 0f)
             return
         }
-        val burn = ship.throttle * FUEL_BURN_RATE / upgrades.fuelEfficiency * dt
+
+        val burn = effectiveThrottle * FUEL_BURN_RATE / upgrades.fuelEfficiency * dt
         val allowed: Boolean
         if (mode.unlimitedFuel) {
             ship.fuelUsed += burn
@@ -86,7 +102,11 @@ class World(
             allowed = true
         }
         if (allowed) {
-            ship.computeThrustAccel(star.position, upgrades.thrustPower)
+            if (controlScheme == ControlScheme.JOYSTICK) {
+                ship.computeJoystickThrust(upgrades.thrustPower)
+            } else {
+                ship.computeThrustAccel(star.position, upgrades.thrustPower)
+            }
         } else {
             ship.thrustAccel.set(0f, 0f)
         }
@@ -182,6 +202,9 @@ class World(
         /** Fuel units burned per second at full throttle, before efficiency. */
         const val FUEL_BURN_RATE = 6f
         const val DOCK_RANGE = 36f
+
+        /** Joystick deflection below this magnitude counts as no input. */
+        const val STICK_DEADZONE = 0.12f
 
         const val PREDICT_DT = 1f / 60f
         const val PREDICT_STEPS = 1200

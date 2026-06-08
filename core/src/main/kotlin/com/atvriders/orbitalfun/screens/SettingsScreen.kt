@@ -12,10 +12,11 @@ import com.badlogic.gdx.graphics.g2d.SpriteBatch
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer
 import com.badlogic.gdx.math.Rectangle
 import com.atvriders.orbitalfun.OrbitalGame
-import com.atvriders.orbitalfun.game.GameMode
+import com.atvriders.orbitalfun.game.ControlScheme
+import com.atvriders.orbitalfun.game.Settings
 
-/** Title screen with mode selection. */
-class MainMenuScreen(private val game: OrbitalGame) : ScreenAdapter() {
+/** Settings: choose the control scheme. Persisted via [Settings]. */
+class SettingsScreen(private val game: OrbitalGame) : ScreenAdapter() {
 
     private val camera = OrthographicCamera()
     private val shapes = ShapeRenderer()
@@ -23,9 +24,8 @@ class MainMenuScreen(private val game: OrbitalGame) : ScreenAdapter() {
     private val font = BitmapFont()
     private val layout = GlyphLayout()
 
-    private val sandboxBtn = Rectangle()
-    private val survivalBtn = Rectangle()
-    private val settingsBtn = Rectangle()
+    private val controlsBtn = Rectangle()
+    private val backBtn = Rectangle()
     private var width = 0f
     private var height = 0f
 
@@ -34,9 +34,9 @@ class MainMenuScreen(private val game: OrbitalGame) : ScreenAdapter() {
             val x = screenX.toFloat()
             val y = height - screenY.toFloat()
             when {
-                sandboxBtn.contains(x, y) -> game.setScreen(GameScreen(game, GameMode.SANDBOX))
-                survivalBtn.contains(x, y) -> game.setScreen(GameScreen(game, GameMode.SURVIVAL))
-                settingsBtn.contains(x, y) -> game.setScreen(SettingsScreen(game))
+                controlsBtn.contains(x, y) -> Settings.controlScheme =
+                    if (Settings.controlScheme == ControlScheme.BUTTONS) ControlScheme.JOYSTICK else ControlScheme.BUTTONS
+                backBtn.contains(x, y) -> game.setScreen(MainMenuScreen(game))
             }
             return true
         }
@@ -51,11 +51,10 @@ class MainMenuScreen(private val game: OrbitalGame) : ScreenAdapter() {
         this.height = height.toFloat()
         camera.setToOrtho(false, this.width, this.height)
         camera.update()
-        val bw = 280f
+        val bw = 420f
         val bh = 80f
-        sandboxBtn.set(this.width / 2f - bw / 2f, this.height * 0.5f, bw, bh)
-        survivalBtn.set(this.width / 2f - bw / 2f, this.height * 0.5f - bh - 24f, bw, bh)
-        settingsBtn.set(this.width / 2f - bw / 2f, this.height * 0.5f - 2f * (bh + 24f), bw, bh)
+        controlsBtn.set(this.width / 2f - bw / 2f, this.height * 0.5f, bw, bh)
+        backBtn.set(this.width / 2f - bw / 2f, this.height * 0.5f - bh - 28f, bw, bh)
     }
 
     override fun render(delta: Float) {
@@ -65,25 +64,29 @@ class MainMenuScreen(private val game: OrbitalGame) : ScreenAdapter() {
         shapes.projectionMatrix = camera.combined
         shapes.begin(ShapeRenderer.ShapeType.Filled)
         shapes.color = Color(0.12f, 0.18f, 0.28f, 1f)
-        shapes.rect(sandboxBtn.x, sandboxBtn.y, sandboxBtn.width, sandboxBtn.height)
-        shapes.rect(survivalBtn.x, survivalBtn.y, survivalBtn.width, survivalBtn.height)
-        shapes.rect(settingsBtn.x, settingsBtn.y, settingsBtn.width, settingsBtn.height)
+        shapes.rect(controlsBtn.x, controlsBtn.y, controlsBtn.width, controlsBtn.height)
+        shapes.color = Color(0.12f, 0.20f, 0.16f, 1f)
+        shapes.rect(backBtn.x, backBtn.y, backBtn.width, backBtn.height)
         shapes.end()
 
         batch.projectionMatrix = camera.combined
         batch.begin()
         font.color = Color.valueOf("9fefff")
-        font.data.setScale(3f)
-        center("ORBITAL FUN", height * 0.78f)
-        font.data.setScale(1.2f)
-        font.color = Color(1f, 1f, 1f, 0.7f)
-        center("gravity, slingshots & maneuver nodes", height * 0.78f - 60f)
+        font.data.setScale(2.4f)
+        center("SETTINGS", height * 0.78f)
+        font.data.setScale(1.4f)
         font.color = Color.WHITE
-        font.data.setScale(1.6f)
-        center("SANDBOX", sandboxBtn.y + sandboxBtn.height / 2f + 10f)
-        center("SURVIVAL", survivalBtn.y + survivalBtn.height / 2f + 10f)
-        center("SETTINGS", settingsBtn.y + settingsBtn.height / 2f + 10f)
+        center("Controls: ${Settings.controlScheme.label}  (tap to switch)", controlsBtn.y + controlsBtn.height / 2f + 10f)
+        center("BACK", backBtn.y + backBtn.height / 2f + 10f)
         font.data.setScale(1f)
+        font.color = Color(1f, 1f, 1f, 0.6f)
+        center(
+            if (Settings.controlScheme == ControlScheme.JOYSTICK)
+                "Joystick: push to thrust in any direction; deflection = throttle."
+            else
+                "Buttons: prograde/retrograde/radial thrust + throttle for precise orbits.",
+            height * 0.30f,
+        )
         batch.end()
     }
 

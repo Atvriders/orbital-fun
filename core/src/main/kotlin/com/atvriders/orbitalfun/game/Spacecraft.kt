@@ -38,6 +38,12 @@ class Spacecraft(
     /** Scratch buffer for the most recently computed thrust acceleration. */
     val thrustAccel = Vector2()
 
+    /**
+     * Virtual-joystick deflection in world orientation (y up), length 0..1, used
+     * by the JOYSTICK control scheme. Zero when the stick is centered/released.
+     */
+    val stick = Vector2()
+
     /** True when the player has selected a thrust direction and opened the throttle. */
     val wantsThrust: Boolean
         get() = activeDir != ThrustDirection.NONE && throttle > 0f
@@ -62,6 +68,21 @@ class Spacecraft(
             return thrustAccel
         }
         thrustAccel.nor().scl(thrustPower * throttle)
+        heading = thrustAccel.angleRad()
+        return thrustAccel
+    }
+
+    /**
+     * Compute thrust for the JOYSTICK scheme: push in any world direction, with
+     * the stick deflection magnitude acting as the throttle. Result stored in
+     * [thrustAccel] and returned (zero when the stick is centered).
+     */
+    fun computeJoystickThrust(thrustPower: Float): Vector2 {
+        thrustAccel.set(0f, 0f)
+        val mag = stick.len()
+        if (mag < 1e-3f) return thrustAccel
+        val throttleFromStick = mag.coerceAtMost(1f)
+        thrustAccel.set(stick).nor().scl(thrustPower * throttleFromStick)
         heading = thrustAccel.angleRad()
         return thrustAccel
     }

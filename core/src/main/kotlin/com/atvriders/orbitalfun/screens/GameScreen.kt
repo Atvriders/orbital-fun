@@ -8,6 +8,7 @@ import com.badlogic.gdx.graphics.GL20
 import com.badlogic.gdx.input.GestureDetector
 import com.atvriders.orbitalfun.OrbitalGame
 import com.atvriders.orbitalfun.game.GameMode
+import com.atvriders.orbitalfun.game.Settings
 import com.atvriders.orbitalfun.game.SystemFactory
 import com.atvriders.orbitalfun.game.ThrustDirection
 import com.atvriders.orbitalfun.game.World
@@ -32,6 +33,9 @@ class GameScreen(private val game: OrbitalGame, private val mode: GameMode) : Sc
     private val speeds = floatArrayOf(0f, 0.5f, 1f, 2f, 4f, 8f)
     private var warpIndex = DEFAULT_SPEED_INDEX
     private val timeWarp: Float get() = speeds[warpIndex]
+
+    private val controlScheme = Settings.controlScheme
+    private var joyPointer = -1
 
     private var physicsAccumulator = 0f
     private var predictionTimer = 0f
@@ -62,6 +66,11 @@ class GameScreen(private val game: OrbitalGame, private val mode: GameMode) : Sc
 
     private val screenInput: InputProcessor = object : InputProcessor {
         override fun touchDown(screenX: Int, screenY: Int, pointer: Int, button: Int): Boolean {
+            if (hud.joystickContains(screenX, screenY)) {
+                joyPointer = pointer
+                world.ship.stick.set(hud.setJoystick(screenX, screenY))
+                return true // capture this pointer for the joystick (no pan/zoom)
+            }
             val action = hud.touchDown(screenX, screenY)
             if (action != null) {
                 handle(action)
@@ -75,18 +84,47 @@ class GameScreen(private val game: OrbitalGame, private val mode: GameMode) : Sc
             return true
         }
 
+        override fun touchDragged(screenX: Int, screenY: Int, pointer: Int): Boolean {
+            if (pointer == joyPointer) {
+                world.ship.stick.set(hud.setJoystick(screenX, screenY))
+                return true
+            }
+            return false
+        }
+
+        override fun touchUp(screenX: Int, screenY: Int, pointer: Int, button: Int): Boolean {
+            if (pointer == joyPointer) {
+                releaseJoystick()
+                return true
+            }
+            return false
+        }
+
+        override fun touchCancelled(screenX: Int, screenY: Int, pointer: Int, button: Int): Boolean {
+            if (pointer == joyPointer) {
+                releaseJoystick()
+                return true
+            }
+            return false
+        }
+
         override fun keyDown(keycode: Int) = false
         override fun keyUp(keycode: Int) = false
         override fun keyTyped(character: Char) = false
-        override fun touchUp(screenX: Int, screenY: Int, pointer: Int, button: Int) = false
-        override fun touchCancelled(screenX: Int, screenY: Int, pointer: Int, button: Int) = false
-        override fun touchDragged(screenX: Int, screenY: Int, pointer: Int) = false
         override fun mouseMoved(screenX: Int, screenY: Int) = false
+    }
+
+    private fun releaseJoystick() {
+        hud.releaseJoystick()
+        world.ship.stick.set(0f, 0f)
+        joyPointer = -1
     }
 
     override fun show() {
         camera = GameCamera(Gdx.graphics.width.toFloat(), Gdx.graphics.height.toFloat())
         camera.centerOn(world.ship.position)
+        world.controlScheme = controlScheme
+        hud.controlScheme = controlScheme
         hud.resize(Gdx.graphics.width, Gdx.graphics.height)
         world.updatePrediction()
         Gdx.input.inputProcessor = InputMultiplexer(screenInput, gestures)
@@ -134,9 +172,11 @@ class GameScreen(private val game: OrbitalGame, private val mode: GameMode) : Sc
 
     private fun reset() {
         world = SystemFactory.build(mode)
+        world.controlScheme = controlScheme
         camera.centerOn(world.ship.position)
         camera.followShip = true
         warpIndex = DEFAULT_SPEED_INDEX
+        releaseJoystick()
         world.updatePrediction()
     }
 

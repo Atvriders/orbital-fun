@@ -7,6 +7,8 @@ import com.badlogic.gdx.graphics.g2d.GlyphLayout
 import com.badlogic.gdx.graphics.g2d.SpriteBatch
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer
 import com.badlogic.gdx.math.Rectangle
+import com.badlogic.gdx.math.Vector2
+import com.atvriders.orbitalfun.game.ControlScheme
 import com.atvriders.orbitalfun.game.GameMode
 import com.atvriders.orbitalfun.game.ThrustDirection
 import com.atvriders.orbitalfun.game.World
@@ -58,6 +60,18 @@ class Hud {
     // Camera follow state, passed in each frame for the CENTER button highlight.
     private var following = true
 
+    /** Active control scheme; set by the screen before resize/render. */
+    var controlScheme: ControlScheme = ControlScheme.BUTTONS
+
+    // Virtual joystick geometry/state (screen y-up space, matching the HUD camera).
+    private var joyCenterX = 0f
+    private var joyCenterY = 0f
+    private val joyRadius = 120f
+    private val joyKnobRadius = 46f
+    private val joyKnob = Vector2()   // knob offset from center, clamped to joyRadius
+    private var joyActive = false
+    private val tmpStick = Vector2()
+
     fun resize(width: Int, height: Int) {
         this.width = width.toFloat()
         this.height = height.toFloat()
@@ -75,20 +89,28 @@ class Hud {
         // not jammed into the corners.
         val baseY = height * 0.12f
 
-        // --- Left thumb pad: thrust D-pad + throttle, lower-left, raised/inset. ---
-        val lLeft = sideMargin
-        val lMid = sideMargin + col
-        val lRight = sideMargin + 2f * col
-        // Bottom row: THR-  RETRO  THR+
-        add(HudAction.THROTTLE_DOWN, "THR -", lLeft, baseY)
-        add(HudAction.RETROGRADE, "RETRO", lMid, baseY)
-        add(HudAction.THROTTLE_UP, "THR +", lRight, baseY)
-        // Middle row: RAD IN  CUT  RAD OUT
-        add(HudAction.RADIAL_IN, "RAD IN", lLeft, baseY + row)
-        add(HudAction.CUT, "CUT", lMid, baseY + row)
-        add(HudAction.RADIAL_OUT, "RAD OUT", lRight, baseY + row)
-        // Top: PRO+ (above CUT)
-        add(HudAction.PROGRADE, "PRO+", lMid, baseY + 2f * row)
+        // --- Left thumb area ---
+        if (controlScheme == ControlScheme.BUTTONS) {
+            // Thrust D-pad + throttle, lower-left, raised/inset.
+            val lLeft = sideMargin
+            val lMid = sideMargin + col
+            val lRight = sideMargin + 2f * col
+            // Bottom row: THR-  RETRO  THR+
+            add(HudAction.THROTTLE_DOWN, "THR -", lLeft, baseY)
+            add(HudAction.RETROGRADE, "RETRO", lMid, baseY)
+            add(HudAction.THROTTLE_UP, "THR +", lRight, baseY)
+            // Middle row: RAD IN  CUT  RAD OUT
+            add(HudAction.RADIAL_IN, "RAD IN", lLeft, baseY + row)
+            add(HudAction.CUT, "CUT", lMid, baseY + row)
+            add(HudAction.RADIAL_OUT, "RAD OUT", lRight, baseY + row)
+            // Top: PRO+ (above CUT)
+            add(HudAction.PROGRADE, "PRO+", lMid, baseY + 2f * row)
+        } else {
+            // Virtual joystick occupies the lower-left thumb area instead.
+            joyCenterX = sideMargin + joyRadius
+            joyCenterY = baseY + joyRadius
+            joyKnob.set(0f, 0f)
+        }
 
         // --- Right thumb pad: maneuver-node planner, lower-right, raised/inset. ---
         val rRight = width - sideMargin - bw
@@ -140,6 +162,34 @@ class Hud {
         return null
     }
 
+    /** True if a touch (screen coords, origin top-left) lands on the joystick area. */
+    fun joystickContains(screenX: Int, screenY: Int): Boolean {
+        if (controlScheme != ControlScheme.JOYSTICK) return false
+        val x = screenX.toFloat()
+        val y = height - screenY.toFloat()
+        val touchR = joyRadius * 1.35f // generous grab area
+        return Vector2.dst(x, y, joyCenterX, joyCenterY) <= touchR
+    }
+
+    /**
+     * Move the joystick knob toward a touch (screen coords) and return the stick
+     * vector in world orientation (y up), length 0..1.
+     */
+    fun setJoystick(screenX: Int, screenY: Int): Vector2 {
+        val x = screenX.toFloat()
+        val y = height - screenY.toFloat()
+        joyKnob.set(x - joyCenterX, y - joyCenterY)
+        if (joyKnob.len() > joyRadius) joyKnob.setLength(joyRadius)
+        joyActive = true
+        return tmpStick.set(joyKnob).scl(1f / joyRadius)
+    }
+
+    /** Release the joystick: knob springs back to center, stick goes to zero. */
+    fun releaseJoystick() {
+        joyKnob.set(0f, 0f)
+        joyActive = false
+    }
+
     fun render(world: World, timeWarp: Float, following: Boolean) {
         this.following = following
         // 1) Button backgrounds.
@@ -151,6 +201,10 @@ class Hud {
             shapes.color = if (highlighted) HILITE else PANEL
             shapes.rect(b.rect.x, b.rect.y, b.rect.width, b.rect.height)
         }
+        if (controlScheme == ControlScheme.JOYSTICK) {
+            shapes.color = if (joyActive) HILITE else PANEL
+            shapes.circle(joyCenterX + joyKnob.x, joyCenterY + joyKnob.y, joyKnobRadius, 24)
+        }
         shapes.end()
 
         // 2) Button borders.
@@ -159,6 +213,10 @@ class Hud {
         for (b in buttons) {
             if (!visible(b.action, world)) continue
             shapes.rect(b.rect.x, b.rect.y, b.rect.width, b.rect.height)
+        }
+        if (controlScheme == ControlScheme.JOYSTICK) {
+            shapes.color = BORDER
+            shapes.circle(joyCenterX, joyCenterY, joyRadius, 48)
         }
         shapes.end()
 
@@ -203,7 +261,12 @@ class Hud {
         } else {
             sb.append("Trajectory: ESCAPE (hyperbolic)\n")
         }
-        sb.append("Throttle: ").append((ship.throttle * 100).toInt()).append("%  ")
+        val throttlePct = if (controlScheme == ControlScheme.JOYSTICK) {
+            (ship.stick.len().coerceAtMost(1f) * 100).toInt()
+        } else {
+            (ship.throttle * 100).toInt()
+        }
+        sb.append("Throttle: ").append(throttlePct).append("%  ")
         sb.append("Speed: ").append(speedText(timeWarp)).append("  ")
         sb.append("Fuel used: ").append(fmt(ship.fuelUsed)).append('\n')
 
